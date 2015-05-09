@@ -1988,23 +1988,31 @@ bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, Sema &TaskifyActi
 	if (voidToken != "void")
 		PP.Diag(FirstToken.getLocation(), diag::err_function_declared_typedef);
 
+	// Filling ASTContext with ours information
+	ASTContext::TaskifyStruct taskStruct;
+
 	// move on to function name
 	PP.Lex(FirstToken);
 	std::string functionNameToken = PP.getSpelling(FirstToken);
+	taskStruct.taskifiedFunctionName = functionNameToken;
 
 	//If out-param is not specified, use functionname as the name and create out-file
 	if (TaskifyActions.outputTaskifiedFunctionName.empty() == true)
 	{
-		TaskifyActions.outputTaskifiedFunctionName = functionNameToken.c_str();
-		TaskifyActions.ActOnPragmaTaskifyOut(functionNameToken.c_str());
+		TaskifyActions.outputTaskifiedFunctionName = functionNameToken;
+		TaskifyActions.ActOnPragmaTaskifyOut(functionNameToken);
 	}
 
 	//If finest-param is not specified, use functionname as the name
 	if (TaskifyActions.finestTaskifiedFunctionName.empty() == true)
 	{
-		TaskifyActions.finestTaskifiedFunctionName = functionNameToken.c_str();
-		TaskifyActions.ActOnPragmaTaskifyFinest(functionNameToken.c_str());
+		TaskifyActions.finestTaskifiedFunctionName = functionNameToken;
+		TaskifyActions.ActOnPragmaTaskifyFinest(functionNameToken);
 	}
+
+	taskStruct.outFunctionName = TaskifyActions.outputTaskifiedFunctionName;
+	taskStruct.finestFunctionName = TaskifyActions.finestTaskifiedFunctionName;
+	TaskifyActions.Context.getTaskifiedFunctions()->push_back(taskStruct);
 
 	//move on to first param
 	PP.Lex(FirstToken);

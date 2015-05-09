@@ -725,4 +725,8 @@ void Sema::ActOnPragmaTaskifyFinest(std::string finestName)
 	// do actions here
 	//printf("FINEST: %s \n", finestName);
 
+	//BEST LINES EVER
+	/*std::string Result;
+	llvm::raw_string_ostream Out(Result);
+	this->Context.getTranslationUnitDecl()->print(Out);*/
 }

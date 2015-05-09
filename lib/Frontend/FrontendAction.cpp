@@ -429,6 +429,89 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   return false;
 }
 
+//TASKIFY
+#include <fstream>
+bool replace(std::string& str, const std::string& from, const std::string& to) 
+{
+	size_t start_pos = str.find(from);
+	if (start_pos == std::string::npos)
+		return false;
+	str.replace(start_pos, from.length(), to);
+	return true;
+}
+
+std::string retrieveFinestBodyCode(std::string result, std::string finestName)
+{
+	std::string functionBody = "";
+	while (true)
+	{
+		int position = result.find(finestName);
+		if (position > -1)
+		{
+			result = result.substr(position);
+			int position_parent = result.find(")");
+			if (position_parent > -1)
+			{
+				result = result.substr(position_parent + 1);
+				if (result[1] == '{')
+				{
+					result = result.substr(2);
+					std::string tokName;
+					int bracketsCounter = 0;
+					int i = 0;
+					while (!(result[i] == '}' && bracketsCounter == 1))
+					{
+						tokName = result[i];
+						if (tokName == "{"){
+							functionBody += "\n";
+
+							//add tabs
+							for (int i = 0; i < bracketsCounter; i++)
+								functionBody += "\t";
+							bracketsCounter++;
+							functionBody += "{\n";
+
+							//add tabs
+							for (int i = 0; i < bracketsCounter; i++)
+								functionBody += "\t";
+						}
+						else if (tokName == "}"){
+							functionBody += "}\n";
+							bracketsCounter--;
+
+							//add tabs
+							for (int i = 0; i < bracketsCounter; i++)
+								functionBody += "\t";
+						}
+						else
+							functionBody += tokName;
+						i++;
+					}
+					break;
+				}
+			}
+		}
+
+	}
+	return functionBody;
+}
+
+void FillFinest(std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions, std::string Result){
+	//std::fstream outFile;
+	for (int i = 0; i < taskifiedFunctions->size(); i++){
+		ASTContext::TaskifyStruct curr_func = (*taskifiedFunctions)[i];
+		std::string fileName = curr_func.outFunctionName + ".hpp";
+		//outFile.open(fileName, std::ios_base::app);
+		
+		std::ifstream file(fileName);
+		std::string code;
+		std::string temp;
+		while (std::getline(file, temp)){ code += temp; }
+
+		replace(code, "FINEST_LEVEL_BODY", retrieveFinestBodyCode(Result, curr_func.finestFunctionName));
+	}
+}
+
 bool FrontendAction::Execute() {
   CompilerInstance &CI = getCompilerInstance();
 
@@ -437,6 +520,20 @@ bool FrontendAction::Execute() {
     ExecuteAction();
   }
   else ExecuteAction();
+
+  //TASKIFY
+  std::string Result;
+  llvm::raw_string_ostream Out(Result);
+  this->Instance->getASTContext().getTranslationUnitDecl()->print(Out);
+  std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions = this->Instance->getASTContext().getTaskifiedFunctions();
+
+  /* TODO:
+	- iterate the vector
+	- add signature for each struct (or count params)
+	- retrieve finest function body string
+	- call the out, open it and add the body instead FINEST_BODY
+  */
+  FillFinest(taskifiedFunctions, Result);
 
   // If we are supposed to rebuild the global module index, do so now unless
   // there were any module-build failures.

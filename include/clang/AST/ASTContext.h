@@ -186,6 +186,7 @@ class ASTContext : public RefCountedBase<ASTContext> {
     TemplateTemplateParmDecl *Parm;
     
   public:
+
     CanonicalTemplateTemplateParm(TemplateTemplateParmDecl *Parm) 
       : Parm(Parm) { }
     
@@ -196,6 +197,7 @@ class ASTContext : public RefCountedBase<ASTContext> {
     static void Profile(llvm::FoldingSetNodeID &ID, 
                         TemplateTemplateParmDecl *Parm);
   };
+
   mutable llvm::FoldingSet<CanonicalTemplateTemplateParm>
     CanonTemplateTemplateParms;
   
@@ -285,6 +287,17 @@ class ASTContext : public RefCountedBase<ASTContext> {
   llvm::DenseMap<Decl*, Decl*> MergedDecls;
 
 public:
+  // TASKIFY
+  struct TaskifyStruct
+  {
+	std::string taskifiedFunctionName;
+	std::string finestFunctionName;
+	std::string outFunctionName;
+  };
+
+  std::vector<TaskifyStruct> v_taskifiedFunctions;
+  std::vector<TaskifyStruct> *getTaskifiedFunctions() { return &v_taskifiedFunctions; }
+
   /// \brief A type synonym for the TemplateOrInstantiation mapping.
   typedef llvm::PointerUnion<VarTemplateDecl *, MemberSpecializationInfo *>
   TemplateOrSpecializationInfo;

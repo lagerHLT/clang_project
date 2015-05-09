@@ -1888,23 +1888,28 @@ Decl *Parser::ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope) {
   // Taskify actions
   PragmaHandler *taskPtr = TaskifyHandler.get();
   Sema *taskifyAction = taskPtr->getAction();
-  if (taskifyAction->isFunctionTaskified == true)
-  {
+  //if (taskifyAction->isFunctionTaskified == true)
+  //{
 	  // Get function body
 	  Stmt* statement = FnBody.get();
-	  std::ostream stream();
+	  /*std::string Result;
+	  llvm::raw_string_ostream Out(Result);
+	  LangOptions lang;
+
+	  PrintingPolicy Policy(lang);*/
+	  statement->dumpPretty(this->Actions.Context);
 	  
 	  //raw_os_ostream stream_raw(&stream);
 	 // statement->printPretty()
-	  statement->dump();  // 
+	  //statement->dump();  // 
 	  //llvm::errs() << "class: " << statement->dumpColor();
 
 	  // reset for future taskify pragmas
-	  taskifyAction->isFunctionTaskified = false;
-	  taskifyAction->outputTaskifiedFunctionName = "";
+	  //taskifyAction->isFunctionTaskified = false;
+	  //taskifyAction->outputTaskifiedFunctionName = "";
 
 
-  }
+  //}
 
   BodyScope.Exit();
   return Actions.ActOnFinishFunctionBody(Decl, FnBody.get());
