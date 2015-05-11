@@ -440,58 +440,60 @@ bool replace(std::string& str, const std::string& from, const std::string& to)
 	return true;
 }
 
+#include <algorithm> 
+#include <functional> 
+#include <cctype>
+#include <locale>
+// trim from start
+static inline std::string &ltrim(std::string &s) {
+	s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+	return s;
+}
+
 std::string retrieveFinestBodyCode(std::string result, std::string finestName)
 {
 	std::string functionBody = "";
-	while (true)
+	int char_position = 0;
+	while (char_position >= 0)
 	{
-		int position = result.find(finestName);
-		if (position > -1)
+		if (char_position = result.find(finestName))//if functionname is found
 		{
-			result = result.substr(position);
-			int position_parent = result.find(")");
-			if (position_parent > -1)
+			result = result.substr(char_position);
+
+			//if the next char is not a space, the token is another identifier
+			if (result[finestName.length()] == ' ')
+				continue;
+
+			if (char_position = result.find(")"))//find next ")"
 			{
-				result = result.substr(position_parent + 1);
-				if (result[1] == '{')
+				result = result.substr(char_position + 1);
+
+				//remove any white spaces
+				result = ltrim(result);
+
+				if (result[0] == '{')//it's a function
 				{
-					result = result.substr(2);
+					//remove "{"
+					result = result.substr(1);
+
+					//save everything until statement is closed
 					std::string tokName;
 					int bracketsCounter = 0;
 					int i = 0;
-					while (!(result[i] == '}' && bracketsCounter == 1))
+					while (!(result[i] == '}' && bracketsCounter == 0))
 					{
 						tokName = result[i];
-						if (tokName == "{"){
-							functionBody += "\n";
-
-							//add tabs
-							for (int i = 0; i < bracketsCounter; i++)
-								functionBody += "\t";
+						if (tokName == "{")
 							bracketsCounter++;
-							functionBody += "{\n";
-
-							//add tabs
-							for (int i = 0; i < bracketsCounter; i++)
-								functionBody += "\t";
-						}
-						else if (tokName == "}"){
-							functionBody += "}\n";
+						else if (tokName == "}")
 							bracketsCounter--;
-
-							//add tabs
-							for (int i = 0; i < bracketsCounter; i++)
-								functionBody += "\t";
-						}
-						else
-							functionBody += tokName;
+						functionBody += tokName;
 						i++;
 					}
 					break;
 				}
 			}
 		}
-
 	}
 	return functionBody;
 }
@@ -503,12 +505,22 @@ void FillFinest(std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions, std:
 		std::string fileName = curr_func.outFunctionName + ".hpp";
 		//outFile.open(fileName, std::ios_base::app);
 		
-		std::ifstream file(fileName);
+		//open file and read all code
+		std::ifstream fileIn(fileName);
 		std::string code;
-		std::string temp;
-		while (std::getline(file, temp)){ code += temp; }
+		std::string line;
+		while (std::getline(fileIn, line))
+			code += line + "\n";
 
-		replace(code, "FINEST_LEVEL_BODY", retrieveFinestBodyCode(Result, curr_func.finestFunctionName));
+		//replace finest function
+		replace(code, "FINEST_LEVEL_BODY;", retrieveFinestBodyCode(Result, curr_func.finestFunctionName));
+
+		fileIn.close();
+
+		//write code to the file
+		std::ofstream fileOut(fileName);
+		fileOut << code;
+		fileOut.close();
 	}
 }
 
