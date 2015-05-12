@@ -7285,7 +7285,7 @@ public:
   /// TASKIFY
   void ActOnPragmaTaskifyOut(std::string outName);
   void ActOnPragmaTaskifyFinest(std::string finestName);
-  void ActOnTaskifyFunctionBody(std::string outName, std::string parameters, std::string functionBody);
+  void ActOnTaskifyFunctionBody(std::string outName, std::string parameters/*, std::string functionBody*/);
 
   /// \brief Called on well formed \#pragma bss_seg/data_seg/const_seg/code_seg.
   void ActOnPragmaMSSeg(SourceLocation PragmaLocation,

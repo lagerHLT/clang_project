@@ -450,19 +450,30 @@ static inline std::string &ltrim(std::string &s) {
 	return s;
 }
 
-std::string retrieveFinestBodyCode(std::string result, std::string finestName)
+std::string retrieveFunctionBody(std::string result, std::string functionName)
 {
 	std::string functionBody = "";
 	int char_position = 0;
 	while (char_position >= 0)
 	{
-		if (char_position = result.find(finestName))//if functionname is found
+		if (char_position = result.find(functionName))//if functionname is found
 		{
+			//is the found functionname not the start of the identifier. break
+			if (isalpha(result[char_position - 1]) ||
+				isdigit(result[char_position - 1]) ||
+				result[char_position - 1] == '_')
+			{
+				result = result.substr(char_position + 1); //move 1 step to ignore this name in the future
+				continue;
+			}
+
 			result = result.substr(char_position);
 
-			//if the next char is not a space, the token is another identifier
-			if (result[finestName.length()] == ' ')
+			//is the found functionname not the end of the identifier 
+			if (result[functionName.length()] != '('){
+				result = result.substr(char_position + 1); //move 1 step to ignore this name in the future
 				continue;
+			}
 
 			if (char_position = result.find(")"))//find next ")"
 			{
@@ -498,11 +509,11 @@ std::string retrieveFinestBodyCode(std::string result, std::string finestName)
 	return functionBody;
 }
 
-void FillFinest(std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions, std::string Result){
+void FillFunctionBody(/*std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions*/std::string fileName, std::string functionName, std::string Result, std::string replaceName){
 	//std::fstream outFile;
-	for (int i = 0; i < taskifiedFunctions->size(); i++){
+	/*for (int i = 0; i < taskifiedFunctions->size(); i++){
 		ASTContext::TaskifyStruct curr_func = (*taskifiedFunctions)[i];
-		std::string fileName = curr_func.outFunctionName + ".hpp";
+		std::string fileName = curr_func.outFunctionName + ".hpp";*/
 		//outFile.open(fileName, std::ios_base::app);
 		
 		//open file and read all code
@@ -511,17 +522,16 @@ void FillFinest(std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions, std:
 		std::string line;
 		while (std::getline(fileIn, line))
 			code += line + "\n";
+		fileIn.close();
 
 		//replace finest function
-		replace(code, "FINEST_LEVEL_BODY;", retrieveFinestBodyCode(Result, curr_func.finestFunctionName));
-
-		fileIn.close();
+		replace(code, replaceName/*"FINEST_LEVEL_BODY;"*/, retrieveFunctionBody(Result, functionName/*curr_func.finestFunctionName*/));
 
 		//write code to the file
 		std::ofstream fileOut(fileName);
 		fileOut << code;
 		fileOut.close();
-	}
+	//}
 }
 
 bool FrontendAction::Execute() {
@@ -537,6 +547,15 @@ bool FrontendAction::Execute() {
   std::string Result;
   llvm::raw_string_ostream Out(Result);
   this->Instance->getASTContext().getTranslationUnitDecl()->print(Out);
+  this->Instance->getASTContext().getTranslationUnitDecl()->print(Out); // this line will give us main. WHY!!!!????
+
+  //test
+  /*std::string Result2;
+  llvm::raw_string_ostream Out2(Result2);
+  PrintingPolicy Policy = this->Instance->getASTContext().getTranslationUnitDecl()->getASTContext().getPrintingPolicy();
+  this->Instance->getASTContext().getTranslationUnitDecl()->getBody()->printPretty(Out2, nullptr, Policy);*/
+
+
   std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions = this->Instance->getASTContext().getTaskifiedFunctions();
 
   /* TODO:
@@ -545,7 +564,12 @@ bool FrontendAction::Execute() {
 	- retrieve finest function body string
 	- call the out, open it and add the body instead FINEST_BODY
   */
-  FillFinest(taskifiedFunctions, Result);
+  for (int i = 0; i < taskifiedFunctions->size(); i++){
+	  ASTContext::TaskifyStruct curr_func = (*taskifiedFunctions)[i];
+	  std::string fileName = curr_func.outFunctionName + ".hpp"; 
+	  FillFunctionBody(fileName, curr_func.finestFunctionName, Result, "FINEST_LEVEL_BODY;");
+	  FillFunctionBody(fileName, curr_func.outFunctionName, Result, "ALGORITHM_BODY;");
+  }
 
   // If we are supposed to rebuild the global module index, do so now unless
   // there were any module-build failures.

@@ -2063,9 +2063,9 @@ bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, Sema &TaskifyActi
 
 	// save all the tokens till the right brackets that
 	// closes the function
-	std::string functionBody = "";
-	int bracketsCounter = 0;
-	while (!(FirstToken.is(tok::r_brace) && bracketsCounter == 1))
+	//std::string functionBody = "";
+	//int bracketsCounter = 0;
+	/*while (!(FirstToken.is(tok::r_brace) && bracketsCounter == 1))
 	{
 		tokName = PP.getSpelling(FirstToken);
 		if (tokName == "{"){
@@ -2092,9 +2092,9 @@ bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, Sema &TaskifyActi
 		else 
 			functionBody += prepare_token_for_output(bracketsCounter, tokName);
 		PP.Lex(FirstToken);
-	}
+	}*/
 
-	TaskifyActions.ActOnTaskifyFunctionBody(TaskifyActions.outputTaskifiedFunctionName, parameters, functionBody);
+	TaskifyActions.ActOnTaskifyFunctionBody(TaskifyActions.outputTaskifiedFunctionName, parameters/*, functionBody*/);
 
 	return true;
 }

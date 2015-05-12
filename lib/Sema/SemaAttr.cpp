@@ -662,7 +662,7 @@ void Sema::ActOnPragmaTaskifyOut(std::string outName)
 }
 
 // TODO: fix spacing in functionBody
-void Sema::ActOnTaskifyFunctionBody(std::string outName, std::string parameters, std::string functionBody)
+void Sema::ActOnTaskifyFunctionBody(std::string outName, std::string parameters/*, std::string functionBody*/)
 {
 	std::string className = outName;
 	std::string fileName = outName;
@@ -686,15 +686,15 @@ void Sema::ActOnTaskifyFunctionBody(std::string outName, std::string parameters,
 	// remove the last )
 	replace(parameters.begin(), parameters.end(), ')', ' ');
 
-	outFile << "static void algorithm(" + parameters + ", XTask *T)";
-	outFile << functionBody;
+	outFile << "static void algorithm(" + parameters + ", XTask *T)\n{";
+	outFile << /*functionBody*/"ALGORITHM_BODY;";
 	outFile << "\n";
 
 	// add the last )
 	parameters += ")";
 
 	// other part
-	outFile << "algorithm_end(T);\n";
+	outFile << "\talgorithm_end(T);\n";
 	outFile << "}\n";
 	outFile << "static void algorithm(XTask *T){\n";
 	outFile << "  unpack2(A,B);\n";
