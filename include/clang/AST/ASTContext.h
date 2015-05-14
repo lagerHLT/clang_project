@@ -295,8 +295,15 @@ public:
 	std::string outFunctionName;
   };
 
+  std::string mainFunctionBody;
   std::vector<TaskifyStruct> v_taskifiedFunctions;
-  std::vector<TaskifyStruct> *getTaskifiedFunctions() { return &v_taskifiedFunctions; }
+  std::vector<TaskifyStruct> *getTaskifiedFunctions() { 
+	  return &v_taskifiedFunctions; 
+  }
+
+  void setMainFunctionBody(std::string b) { mainFunctionBody = b;  }
+  std::string getMainFunctionBody() { return mainFunctionBody;  }
+
 
   /// \brief A type synonym for the TemplateOrInstantiation mapping.
   typedef llvm::PointerUnion<VarTemplateDecl *, MemberSpecializationInfo *>

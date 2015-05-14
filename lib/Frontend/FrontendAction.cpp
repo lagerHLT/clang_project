@@ -535,19 +535,19 @@ void FillFunctionBody(/*std::vector<ASTContext::TaskifyStruct> *taskifiedFunctio
 }
 
 bool FrontendAction::Execute() {
-  CompilerInstance &CI = getCompilerInstance();
+	CompilerInstance &CI = getCompilerInstance();
 
-  if (CI.hasFrontendTimer()) {
-    llvm::TimeRegion Timer(CI.getFrontendTimer());
-    ExecuteAction();
-  }
-  else ExecuteAction();
+	if (CI.hasFrontendTimer()) {
+		llvm::TimeRegion Timer(CI.getFrontendTimer());
+		ExecuteAction();
+	}
+	else ExecuteAction();
 
-  //TASKIFY
-  std::string Result;
-  llvm::raw_string_ostream Out(Result);
-  this->Instance->getASTContext().getTranslationUnitDecl()->print(Out);
-  this->Instance->getASTContext().getTranslationUnitDecl()->print(Out); // this line will give us main. WHY!!!!????
+	//TASKIFY
+	std::string Result;
+	llvm::raw_string_ostream Out(Result);
+	CI.getASTContext().getTranslationUnitDecl()->print(Out);
+	//CI.getASTContext().getTranslationUnitDecl()->print(Out); // this line will give us main. WHY!!!!????
 
   //test
   /*std::string Result2;
@@ -564,11 +564,26 @@ bool FrontendAction::Execute() {
 	- retrieve finest function body string
 	- call the out, open it and add the body instead FINEST_BODY
   */
-  for (int i = 0; i < taskifiedFunctions->size(); i++){
+  for (int i = 0; i < taskifiedFunctions->size(); i++)
+  {
 	  ASTContext::TaskifyStruct curr_func = (*taskifiedFunctions)[i];
 	  std::string fileName = curr_func.outFunctionName + ".hpp"; 
 	  FillFunctionBody(fileName, curr_func.finestFunctionName, Result, "FINEST_LEVEL_BODY;");
 	  FillFunctionBody(fileName, curr_func.outFunctionName, Result, "ALGORITHM_BODY;");
+  }
+
+  if (taskifiedFunctions->size() > 0){
+	  // edit the main body
+	  std::string mainBody = CI.getASTContext().getMainFunctionBody();
+
+	  // first {
+	  int posOfFirstBracket = mainBody.find_first_of('{');
+	  mainBody = mainBody.insert(posOfFirstBracket + 1, "fw_start();");
+
+	  // last }
+	  int posOfLastBracket = mainBody.find_last_of('}');
+	  mainBody = mainBody.insert(posOfLastBracket, "fw_end()");
+
   }
 
   // If we are supposed to rebuild the global module index, do so now unless

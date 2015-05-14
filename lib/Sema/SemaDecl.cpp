@@ -8185,6 +8185,33 @@ bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
   return Redeclaration;
 }
 
+// TASKIFY
+#include "clang/AST/RecursiveASTVisitor.h"
+class FindNamedClassVisitor : public RecursiveASTVisitor<FindNamedClassVisitor> {
+public:
+	FindNamedClassVisitor(ASTContext *C) : Context(*C) { }
+
+	bool VisitFunctionDecl(FunctionDecl *Declaration) 
+	{
+		if (Declaration->getQualifiedNameAsString() == "main") 
+		{
+			FullSourceLoc FullLocation = Context.getFullLoc(Declaration->getLocStart());
+			clang::DeclContext *i = Declaration->castToDeclContext(Declaration);
+			clang::Decl decl(i->getDeclKind(), i, FullLocation);
+
+			const char *line = Context.getSourceManager().getCharacterData(decl.getLocation());
+			line = Context.getSourceManager().getCharacterData(decl.getLocStart());
+			const char *end_line = Context.getSourceManager().getCharacterData(decl.getLocEnd());
+
+			std::string body = line;
+			Context.setMainFunctionBody(body);
+		}
+		return true;
+	}
+private:
+	ASTContext &Context;
+};
+
 void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
   // C++11 [basic.start.main]p3:
   //   A program that [...] declares main to be inline, static or
@@ -8255,6 +8282,10 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
                                 : FixItHint());
       FD->setInvalidDecl(true);
     }
+
+	// TASKIFY
+	FindNamedClassVisitor fn(&this->getASTContext());
+	fn.VisitFunctionDecl(FD);
   }
 
   // Treat protoless main() as nullary.

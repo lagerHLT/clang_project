@@ -311,7 +311,7 @@ protected:
 private:
   bool AccessDeclContextSanity() const;
 
-protected:
+public:
 
   Decl(Kind DK, DeclContext *DC, SourceLocation L)
     : NextInContextAndBits(), DeclCtx(DC),
