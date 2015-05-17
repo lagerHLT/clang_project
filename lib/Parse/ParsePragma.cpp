@@ -158,14 +158,14 @@ struct PragmaUnrollHintHandler : public PragmaHandler {
 
 // TASKIFY
 struct PragmaTaskifyHandler : public PragmaHandler {
-	PragmaTaskifyHandler(Sema &S) : PragmaHandler("taskify"), TaskifyActions(S) { }
+	PragmaTaskifyHandler(ASTContext &context) : PragmaHandler("taskify"), context(context) { }
 	void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer, Token &FirstToken) override;
 
 public:
-	Sema* getAction(){ return &TaskifyActions; }
+	ASTContext* getContext(){ return &context; }
 
 private:
-	Sema &TaskifyActions;
+	ASTContext &context;
 };
 
 }  // end namespace
@@ -184,7 +184,7 @@ void Parser::initializePragmaHandlers() {
   PP.AddPragmaHandler(PackHandler.get());
 
   // TASKIFY
-  TaskifyHandler.reset(new PragmaTaskifyHandler(Actions));
+  TaskifyHandler.reset(new PragmaTaskifyHandler(Actions.Context));
   PP.AddPragmaHandler(TaskifyHandler.get());
 
   MSStructHandler.reset(new PragmaMSStructHandler());
@@ -1901,95 +1901,12 @@ taskify_operation getTaskifyOperation(std::string const& tokenOp) {
 	return error;
 }
 
-//Add spaces to tokens that should have it
-std::string prepare_token_for_output(int bracketCounter, std::string tokName){
-	static bool remove_space_after = false;
-	static bool condition = false;
-	static bool is_newline = true;
-	static int paranthesis_count = 0;
-
-	//conditions
-	if (tokName == "for" ||
-		tokName == "while"){
-		condition = true;
-		paranthesis_count = 0;
-
-		//if new line, remove space before
-		if (is_newline){
-			is_newline = false;
-			return tokName;
-		}
-		return " " + tokName;
-	}
-
-	//nospace before AND after token
-	if (tokName == "." ||
-		tokName == "->"){
-		remove_space_after = true;
-		return tokName;
-	}
-	
-	//nospace before token
-	if (tokName == "*" ||
-		tokName == "&" ||
-		tokName == "[" || 
-		tokName == "]")
-		return tokName;
-
-	if (tokName == "("){
-		paranthesis_count++;
-		return tokName;
-	}
-
-	if (tokName == ")"){
-		paranthesis_count--;
-		if (condition && paranthesis_count == 0)
-			condition = false;
-		return tokName;
-	}
-
-	//nospace before token AND newline
-	if (tokName == ";")
-		if (condition)
-			return tokName;
-		else{
-			std::string output = tokName + "\n";
-			for (int i = 0; i < bracketCounter; i++)
-				output += "\t";
-			return output;
-		}
-
-	//nothing has to be added
-	if (remove_space_after){
-		remove_space_after = false;
-		return tokName;
-	}
-
-	//if new line, remove space before
-	if (is_newline){
-		is_newline = false;
-		return tokName;
-	}
-
-	//space before = standard token
-	return   " " + tokName;
-	
-}
-
-bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, Sema &TaskifyActions){
-	/*TODO
-	* if finest or out is not specified, use the function name
-	* Find out how many arguments there are
-	* Validate the arguments and return type -> error otherwise
-	* Store the function body in file*/
+bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, ASTContext::TaskifyStruct &taskStruct, ASTContext &context){
 
 	PP.Lex(FirstToken);
 	std::string voidToken = PP.getSpelling(FirstToken);
 	if (voidToken != "void")
 		PP.Diag(FirstToken.getLocation(), diag::err_function_declared_typedef);
-
-	// Filling ASTContext with ours information
-	ASTContext::TaskifyStruct taskStruct;
 
 	// move on to function name
 	PP.Lex(FirstToken);
@@ -1997,22 +1914,16 @@ bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, Sema &TaskifyActi
 	taskStruct.taskifiedFunctionName = functionNameToken;
 
 	//If out-param is not specified, use functionname as the name and create out-file
-	if (TaskifyActions.outputTaskifiedFunctionName.empty() == true)
+	if (taskStruct.outFunctionName.empty() == true)
 	{
-		TaskifyActions.outputTaskifiedFunctionName = functionNameToken;
-		TaskifyActions.ActOnPragmaTaskifyOut(functionNameToken);
+		taskStruct.outFunctionName = functionNameToken;
 	}
 
 	//If finest-param is not specified, use functionname as the name
-	if (TaskifyActions.finestTaskifiedFunctionName.empty() == true)
+	if (taskStruct.finestFunctionName.empty() == true)
 	{
-		TaskifyActions.finestTaskifiedFunctionName = functionNameToken;
-		TaskifyActions.ActOnPragmaTaskifyFinest(functionNameToken);
+		taskStruct.finestFunctionName = functionNameToken;
 	}
-
-	taskStruct.outFunctionName = TaskifyActions.outputTaskifiedFunctionName;
-	taskStruct.finestFunctionName = TaskifyActions.finestTaskifiedFunctionName;
-	TaskifyActions.Context.getTaskifiedFunctions()->push_back(taskStruct);
 
 	//move on to first param
 	PP.Lex(FirstToken);
@@ -2058,50 +1969,19 @@ bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, Sema &TaskifyActi
 			PP.Lex(FirstToken);
 	}
 
+	taskStruct.nr_of_params = paramCounter;
+	taskStruct.taskified_function_params = parameters;
+	context.getTaskifiedFunctions()->push_back(taskStruct);
+
 	// read left brackets
-	PP.Lex(FirstToken);
-
-	// save all the tokens till the right brackets that
-	// closes the function
-	//std::string functionBody = "";
-	//int bracketsCounter = 0;
-	/*while (!(FirstToken.is(tok::r_brace) && bracketsCounter == 1))
-	{
-		tokName = PP.getSpelling(FirstToken);
-		if (tokName == "{"){
-			functionBody += "\n";
-
-			//add tabs
-			for (int i = 0; i < bracketsCounter; i++)
-				functionBody += "\t";
-			bracketsCounter++;
-			functionBody += "{\n";
-
-			//add tabs
-			for (int i = 0; i < bracketsCounter; i++)
-				functionBody += "\t";
-		}
-		else if (tokName == "}"){
-			functionBody += "}\n";
-			bracketsCounter--;
-
-			//add tabs
-			for (int i = 0; i < bracketsCounter; i++)
-				functionBody += "\t";
-		}
-		else 
-			functionBody += prepare_token_for_output(bracketsCounter, tokName);
-		PP.Lex(FirstToken);
-	}*/
-
-	TaskifyActions.ActOnTaskifyFunctionBody(TaskifyActions.outputTaskifiedFunctionName, parameters/*, functionBody*/);
-
+	//PP.Lex(FirstToken);
 	return true;
 }
 
 void PragmaTaskifyHandler::HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer, Token &FirstToken)
 {
 	// this loop will get the tokens after 'taskify'
+	ASTContext::TaskifyStruct taskStruct;
 	while (FirstToken.isNot(clang::tok::eod))   // check if it's the end of the line
 	{
 		// get next token
@@ -2117,10 +1997,11 @@ void PragmaTaskifyHandler::HandlePragma(Preprocessor &PP, PragmaIntroducerKind I
 			PP.Lex(FirstToken);
 
 			// create a new file called with the name after '=' with extension .hpp
-			std::string something = PP.getSpelling(FirstToken);
-			TaskifyActions.ActOnPragmaTaskifyOut(something);
+			std::string name = PP.getSpelling(FirstToken);
+			/*TaskifyActions.ActOnPragmaTaskifyOut(something);
 			TaskifyActions.isFunctionTaskified = true;
-			TaskifyActions.outputTaskifiedFunctionName = something;
+			TaskifyActions.outputTaskifiedFunctionName = something;*/
+			taskStruct.outFunctionName = name;
 
 			break;
 		}
@@ -2132,10 +2013,11 @@ void PragmaTaskifyHandler::HandlePragma(Preprocessor &PP, PragmaIntroducerKind I
 
 			// read the content of the function defined after '='
 			// check rules in the project description
-			std::string something = PP.getSpelling(FirstToken);
-			TaskifyActions.ActOnPragmaTaskifyFinest(something);
+			std::string name = PP.getSpelling(FirstToken);
+			/*TaskifyActions.ActOnPragmaTaskifyFinest(something);
 			TaskifyActions.isFunctionTaskified = true;
-			TaskifyActions.finestTaskifiedFunctionName = something;
+			TaskifyActions.finestTaskifiedFunctionName = something;*/
+			taskStruct.finestFunctionName = name;
 
 			break;
 		}
@@ -2156,13 +2038,11 @@ void PragmaTaskifyHandler::HandlePragma(Preprocessor &PP, PragmaIntroducerKind I
 	PP.EnableBacktrackAtThisPos();
 
 	// from here we have the function things
-	if (TaskifyAlgorithmBody(PP, FirstToken, TaskifyActions) == false)
+	if (TaskifyAlgorithmBody(PP, FirstToken, taskStruct, context) == false)
 		return;
 
 	PP.Backtrack();	// reposition the lexer where we left
 }
-
-
 
 // #pragma clang optimize off
 // #pragma clang optimize on

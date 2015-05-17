@@ -431,6 +431,93 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
 //TASKIFY
 #include <fstream>
+#include <algorithm> 
+#include <functional> 
+#include <cctype>
+#include <locale>
+// it capitalizes the first letter of a string
+void Capitalize(std::string &s)
+{
+	bool cap = true;
+
+	for (unsigned int i = 0; i <= s.length(); i++)
+	{
+		if (isalpha(s[i]) && cap == true)
+		{
+			s[i] = toupper(s[i]);
+			cap = false;
+		}
+		else if (isspace(s[i]))
+		{
+			cap = true;
+		}
+	}
+}
+
+void CreateOutputFile(std::string outName, std::string parameters)
+{
+	std::string className = outName;
+	std::string fileName = outName;
+	std::ofstream outFile;
+	fileName += ".hpp";
+	outFile.open(fileName, std::ios_base::app);
+
+	//beginning of file
+	Capitalize(className);
+	outFile << "class Generic" << className << "{\n";
+	outFile << "public:\n";
+	outFile << "\tstatic void base(";
+
+	// body of finest function here
+	outFile << parameters + "\n{";
+	outFile << "\t FINEST_LEVEL_BODY;";
+	outFile << "\n}\n";
+
+	// other part
+	outFile << "static void kernel(XTask *T){ \n";
+	outFile << " if ( FinestLevel(T) )\n";
+	outFile << "   base(T);\n";
+	outFile << "  else\n";
+	outFile << "   algorithm(T);\n";
+	outFile << "};\n";
+
+	// remove the last )
+	replace(parameters.begin(), parameters.end(), ')', ' ');
+
+	outFile << "static void algorithm(" + parameters + ", XTask *T)\n{";
+	outFile << /*functionBody*/"ALGORITHM_BODY;";
+	outFile << "\n";
+
+	// add the last )
+	parameters += ")";
+
+	// other part
+	outFile << "\talgorithm_end(T);\n";
+	outFile << "}\n";
+	outFile << "static void algorithm(XTask *T){\n";
+	outFile << "  unpack2(A,B);\n";
+	outFile << "  algorithm(A,B,T);\n";
+	outFile << "}\n";
+
+	outFile << "static void base(XTask *T){\n";
+	outFile << "  unpack2(A,B);\n";
+	outFile << "  base(A,B);\n";
+	outFile << "}\n";
+	outFile << "void operator()(" + parameters + "{\n";
+	outFile << "  run(A,B);\n";
+	outFile << "}\n";
+	outFile << "static void run(" + parameters + "{\n";
+	outFile << "  submit_task(A,B);\n";
+	outFile << "}\n";
+	outFile << "};\n";
+
+	Capitalize(className);
+	outFile << "Generic" + className + " " + outName + ";\n";
+
+	// close file
+	outFile.close();
+}
+
 bool replace(std::string& str, const std::string& from, const std::string& to) 
 {
 	size_t start_pos = str.find(from);
@@ -440,10 +527,6 @@ bool replace(std::string& str, const std::string& from, const std::string& to)
 	return true;
 }
 
-#include <algorithm> 
-#include <functional> 
-#include <cctype>
-#include <locale>
 // trim from start
 static inline std::string &ltrim(std::string &s) {
 	s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
@@ -509,7 +592,7 @@ std::string retrieveFunctionBody(std::string result, std::string functionName)
 	return functionBody;
 }
 
-void FillFunctionBody(/*std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions*/std::string fileName, std::string functionName, std::string Result, std::string replaceName){
+void FillFunctionBody(std::string fileName, std::string functionName, std::string Result, std::string replaceName){
 	//std::fstream outFile;
 	/*for (int i = 0; i < taskifiedFunctions->size(); i++){
 		ASTContext::TaskifyStruct curr_func = (*taskifiedFunctions)[i];
@@ -549,40 +632,31 @@ bool FrontendAction::Execute() {
 	CI.getASTContext().getTranslationUnitDecl()->print(Out);
 	//CI.getASTContext().getTranslationUnitDecl()->print(Out); // this line will give us main. WHY!!!!????
 
-  //test
-  /*std::string Result2;
-  llvm::raw_string_ostream Out2(Result2);
-  PrintingPolicy Policy = this->Instance->getASTContext().getTranslationUnitDecl()->getASTContext().getPrintingPolicy();
-  this->Instance->getASTContext().getTranslationUnitDecl()->getBody()->printPretty(Out2, nullptr, Policy);*/
-
 
   std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions = this->Instance->getASTContext().getTaskifiedFunctions();
 
-  /* TODO:
-	- iterate the vector
-	- add signature for each struct (or count params)
-	- retrieve finest function body string
-	- call the out, open it and add the body instead FINEST_BODY
-  */
+  //Create output files
   for (int i = 0; i < taskifiedFunctions->size(); i++)
   {
 	  ASTContext::TaskifyStruct curr_func = (*taskifiedFunctions)[i];
-	  std::string fileName = curr_func.outFunctionName + ".hpp"; 
+	  std::string fileName = curr_func.outFunctionName + ".hpp";
+	  CreateOutputFile(curr_func.outFunctionName, curr_func.taskified_function_params);
 	  FillFunctionBody(fileName, curr_func.finestFunctionName, Result, "FINEST_LEVEL_BODY;");
 	  FillFunctionBody(fileName, curr_func.outFunctionName, Result, "ALGORITHM_BODY;");
   }
 
+  //retrieve and modify main function
   if (taskifiedFunctions->size() > 0){
 	  // edit the main body
-	  std::string mainBody = CI.getASTContext().getMainFunctionBody();
+	  std::string mainFunc = CI.getASTContext().getMainFunctionBody();
 
 	  // first {
-	  int posOfFirstBracket = mainBody.find_first_of('{');
-	  mainBody = mainBody.insert(posOfFirstBracket + 1, "fw_start();");
+	  int posOfFirstBracket = mainFunc.find_first_of('{');
+	  mainFunc = mainFunc.insert(posOfFirstBracket + 1, "fw_start();");
 
 	  // last }
-	  int posOfLastBracket = mainBody.find_last_of('}');
-	  mainBody = mainBody.insert(posOfLastBracket, "fw_end()");
+	  int posOfLastBracket = mainFunc.find_last_of('}');
+	  mainFunc = mainFunc.insert(posOfLastBracket, "fw_end()");
 
   }
 

@@ -293,6 +293,8 @@ public:
 	std::string taskifiedFunctionName;
 	std::string finestFunctionName;
 	std::string outFunctionName;
+	std::string taskified_function_params;
+	int nr_of_params;
   };
 
   std::string mainFunctionBody;

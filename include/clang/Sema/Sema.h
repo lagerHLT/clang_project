@@ -234,11 +234,6 @@ class Sema {
   }
 
 public:
-	// TASKIFY
-	bool isFunctionTaskified;
-	std::string outputTaskifiedFunctionName;
-	std::string finestTaskifiedFunctionName;
-	//clang::SourceLocation locationOfBindendPragma;
 
   typedef OpaquePtr<DeclGroupRef> DeclGroupPtrTy;
   typedef OpaquePtr<TemplateName> TemplateTy;
@@ -7282,10 +7277,6 @@ public:
                     int SectionFlags,
                     SourceLocation PragmaSectionLocation);
 
-  /// TASKIFY
-  void ActOnPragmaTaskifyOut(std::string outName);
-  void ActOnPragmaTaskifyFinest(std::string finestName);
-  void ActOnTaskifyFunctionBody(std::string outName, std::string parameters/*, std::string functionBody*/);
 
   /// \brief Called on well formed \#pragma bss_seg/data_seg/const_seg/code_seg.
   void ActOnPragmaMSSeg(SourceLocation PragmaLocation,
