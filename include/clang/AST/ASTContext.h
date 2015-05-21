@@ -294,7 +294,9 @@ public:
 	std::string finestFunctionName;
 	std::string outFunctionName;
 	std::string taskified_function_params;
-	int nr_of_params;
+	std::string fileName;
+	std::vector<std::string> includes;
+	//int nr_of_params;
   };
 
   std::string mainFunctionBody;

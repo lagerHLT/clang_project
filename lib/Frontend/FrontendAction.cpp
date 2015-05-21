@@ -454,12 +454,29 @@ void Capitalize(std::string &s)
 	}
 }
 
-void CreateOutputFile(std::string outName, std::string parameters)
+bool isCompleteFunctionName(std::string funcBody, int charStart, int nameLength){
+	//is the found functionname not the start of the identifier
+	if (isalpha(funcBody[charStart - 1]) ||
+		isdigit(funcBody[charStart - 1]) ||
+		funcBody[charStart - 1] == '_')
+	{
+		return false;
+	}
+
+	funcBody = funcBody.substr(charStart);
+
+	//is the found functionname not the end of the identifier 
+	if (funcBody[nameLength] != '('){
+		return false;
+	}
+
+	return true;
+}
+
+void CreateOutputFile(std::string outName, std::string fileName, std::string parameters)
 {
 	std::string className = outName;
-	std::string fileName = outName;
 	std::ofstream outFile;
-	fileName += ".hpp";
 	outFile.open(fileName, std::ios_base::app);
 
 	//beginning of file
@@ -518,6 +535,26 @@ void CreateOutputFile(std::string outName, std::string parameters)
 	outFile.close();
 }
 
+void CreateTranslatedFile(std::string fileName, std::vector<std::string> includes, std::string main_function){
+	std::ofstream outFile;
+	outFile.open(fileName, std::ios_base::app);
+
+	//Add includes
+	for (int i = 0; i < includes.size(); i++){
+		outFile << "#include ";
+		outFile << "\"" + includes[i] + "\"";
+	}
+
+	//new line
+	outFile << "\n";
+
+	//add main
+	outFile << main_function;
+
+	// close file
+	outFile.close();
+}
+
 bool replace(std::string& str, const std::string& from, const std::string& to) 
 {
 	size_t start_pos = str.find(from);
@@ -542,21 +579,14 @@ std::string retrieveFunctionBody(std::string result, std::string functionName)
 		if (char_position = result.find(functionName))//if functionname is found
 		{
 			//is the found functionname not the start of the identifier. break
-			if (isalpha(result[char_position - 1]) ||
-				isdigit(result[char_position - 1]) ||
-				result[char_position - 1] == '_')
+			if (!isCompleteFunctionName(result, char_position, functionName.length()))
 			{
 				result = result.substr(char_position + 1); //move 1 step to ignore this name in the future
 				continue;
 			}
 
+			//we found a function. Drop the tail of the string
 			result = result.substr(char_position);
-
-			//is the found functionname not the end of the identifier 
-			if (result[functionName.length()] != '('){
-				result = result.substr(char_position + 1); //move 1 step to ignore this name in the future
-				continue;
-			}
 
 			if (char_position = result.find(")"))//find next ")"
 			{
@@ -617,6 +647,58 @@ void FillFunctionBody(std::string fileName, std::string functionName, std::strin
 	//}
 }
 
+std::string PrepareMainFunction(std::string mainFunction, std::vector<ASTContext::TaskifyStruct> &taskifiedFunctions){
+	//insert fw_start and fw_end
+	int posOfFirstBracket = mainFunction.find_first_of('{');
+	mainFunction = mainFunction.insert(posOfFirstBracket + 1, "fw_start();");
+	int posOfLastBracket = mainFunction.find_last_of('}');
+	mainFunction = mainFunction.insert(posOfLastBracket, "fw_end()");
+
+	//change function call names
+	for (int i = 0; i < taskifiedFunctions.size(); i++){
+		std::string newFuncName = taskifiedFunctions[i].outFunctionName;
+		std::string oldFuncName = taskifiedFunctions[i].taskifiedFunctionName;
+
+		//if the have the same name, nothing has to be changed
+		if (newFuncName == oldFuncName)
+			continue;
+
+		int current_pos = 0;
+		while (current_pos = mainFunction.substr(current_pos).find(oldFuncName))//if functionname is found
+		{
+			//is the found functionname is not a function call. break
+			if (!isCompleteFunctionName(mainFunction, current_pos, oldFuncName.length())){
+				//move 1 step to ignore this name in the future
+				current_pos++; 
+			}
+			else{ 
+				//it's a function call. rename it
+				replace(mainFunction.substr(current_pos, oldFuncName.length()), oldFuncName, newFuncName);
+			}
+		}
+	}
+	return mainFunction;
+}
+
+static const clang::FileEntry * getFileEntryForDecl(const clang::Decl * decl, clang::SourceManager * sourceManager)
+{
+	if (!decl || !sourceManager) {
+		return 0;
+	}
+	clang::SourceLocation sLoc = decl->getLocation();
+	clang::FileID fileID = sourceManager->getFileID(sLoc);
+	return sourceManager->getFileEntryForID(fileID);
+}
+
+static const char * getFileNameForDecl(const clang::Decl * decl, clang::SourceManager * sourceManager)
+{
+	const clang::FileEntry * fileEntry = getFileEntryForDecl(decl, sourceManager);
+	if (!fileEntry) {
+		return 0;
+	}
+	return fileEntry->getName();
+}
+
 bool FrontendAction::Execute() {
 	CompilerInstance &CI = getCompilerInstance();
 
@@ -630,34 +712,61 @@ bool FrontendAction::Execute() {
 	std::string Result;
 	llvm::raw_string_ostream Out(Result);
 	CI.getASTContext().getTranslationUnitDecl()->print(Out);
+	
 	//CI.getASTContext().getTranslationUnitDecl()->print(Out); // this line will give us main. WHY!!!!????
+	//all input files
+	std::vector<FrontendInputFile, std::allocator<FrontendInputFile>> files = CI.getFrontendOpts().Inputs;
 
+	//View file content
+	DeclContext::decl_iterator iter_start = CI.getASTContext().getTranslationUnitDecl()->decls_begin();
+	for (; iter_start != CI.getASTContext().getTranslationUnitDecl()->decls_end(); iter_start++){
+		clang::SourceLocation sLoc = iter_start->getLocation();
+		clang::FileID fileID = CI.getASTContext().getSourceManager().getFileID(sLoc);
+		StringRef name = CI.getASTContext().getSourceManager().getFilename(sLoc);
+		StringRef data = CI.getASTContext().getSourceManager().getBufferData(fileID);
+
+		const FileEntry *fe = CI.getASTContext().getSourceManager().getFileManager().getFile(name);
+		bool valid = 0;
+		
+	}
 
   std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions = this->Instance->getASTContext().getTaskifiedFunctions();
 
+  //TASK ALSO
+  FrontendOptions opt = CI.getFrontendOpts();
+  //CI.getPreprocessor().getPreprocessingRecord()->getSourceManager().getIncludeLoc();
+
+
   //Create output files
+  std::vector<std::string> includes; 
+  includes.push_back("framework");
   for (int i = 0; i < taskifiedFunctions->size(); i++)
   {
 	  ASTContext::TaskifyStruct curr_func = (*taskifiedFunctions)[i];
 	  std::string fileName = curr_func.outFunctionName + ".hpp";
-	  CreateOutputFile(curr_func.outFunctionName, curr_func.taskified_function_params);
+	  CreateOutputFile(curr_func.outFunctionName, fileName, curr_func.taskified_function_params);
 	  FillFunctionBody(fileName, curr_func.finestFunctionName, Result, "FINEST_LEVEL_BODY;");
 	  FillFunctionBody(fileName, curr_func.outFunctionName, Result, "ALGORITHM_BODY;");
+
+	  //add all outnames as includes
+	  includes.push_back(curr_func.outFunctionName);
   }
 
   //retrieve and modify main function
+  std::string mainFunc;
   if (taskifiedFunctions->size() > 0){
 	  // edit the main body
-	  std::string mainFunc = CI.getASTContext().getMainFunctionBody();
+	  mainFunc = CI.getASTContext().getMainFunctionBody();
+	  //mainFunc = PrepareMainFunction(mainFunc, taskifiedFunctions);
 
-	  // first {
-	  int posOfFirstBracket = mainFunc.find_first_of('{');
-	  mainFunc = mainFunc.insert(posOfFirstBracket + 1, "fw_start();");
+	  //Get sourceFileName<----------------------------------------------???
+	  std::string fileName = "add_xlat.cpp";
 
-	  // last }
-	  int posOfLastBracket = mainFunc.find_last_of('}');
-	  mainFunc = mainFunc.insert(posOfLastBracket, "fw_end()");
+	  //Get include directives from source files<----------------------------------------------???
+	  includes.push_back("??");
 
+	  //create one translated file for each source file
+	  CreateTranslatedFile(fileName, includes, mainFunc);
   }
 
   // If we are supposed to rebuild the global module index, do so now unless

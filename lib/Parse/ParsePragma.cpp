@@ -1901,12 +1901,20 @@ taskify_operation getTaskifyOperation(std::string const& tokenOp) {
 	return error;
 }
 
+#include <stdexcept>
 bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, ASTContext::TaskifyStruct &taskStruct, ASTContext &context){
+	StringRef name = context.getSourceManager().getFilename(FirstToken.getLocation());
+	taskStruct.fileName = name.str();
+
+	clang::HeaderSearch *src = &PP.getHeaderSearchInfo();
 
 	PP.Lex(FirstToken);
 	std::string voidToken = PP.getSpelling(FirstToken);
-	if (voidToken != "void")
-		PP.Diag(FirstToken.getLocation(), diag::err_function_declared_typedef);
+	if (voidToken != "void"){
+		throw std::invalid_argument("Function return type is not void");
+	}
+
+	//ETST
 
 	// move on to function name
 	PP.Lex(FirstToken);
@@ -1919,10 +1927,10 @@ bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, ASTContext::Taski
 		taskStruct.outFunctionName = functionNameToken;
 	}
 
-	//If finest-param is not specified, use functionname as the name
+	//If finest-param is not specified, print an error
 	if (taskStruct.finestFunctionName.empty() == true)
 	{
-		taskStruct.finestFunctionName = functionNameToken;
+		throw std::invalid_argument("Finest function not declared");
 	}
 
 	//move on to first param
@@ -1969,7 +1977,7 @@ bool TaskifyAlgorithmBody(Preprocessor &PP, Token &FirstToken, ASTContext::Taski
 			PP.Lex(FirstToken);
 	}
 
-	taskStruct.nr_of_params = paramCounter;
+	//taskStruct.nr_of_params = paramCounter;
 	taskStruct.taskified_function_params = parameters;
 	context.getTaskifiedFunctions()->push_back(taskStruct);
 
