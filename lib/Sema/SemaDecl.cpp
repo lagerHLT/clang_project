@@ -8186,7 +8186,7 @@ bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
 }
 
 // TASKIFY
-#include "clang/AST/RecursiveASTVisitor.h"
+/*#include "clang/AST/RecursiveASTVisitor.h"
 class FindNamedClassVisitor : public RecursiveASTVisitor<FindNamedClassVisitor> {
 public:
 	FindNamedClassVisitor(ASTContext *C) : Context(*C) { }
@@ -8210,7 +8210,7 @@ public:
 	}
 private:
 	ASTContext &Context;
-};
+};*/
 
 void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
   // C++11 [basic.start.main]p3:
@@ -8284,8 +8284,8 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
     }
 
 	// TASKIFY
-	FindNamedClassVisitor fn(&this->getASTContext());
-	fn.VisitFunctionDecl(FD);
+	/*FindNamedClassVisitor fn(&this->getASTContext());
+	fn.VisitFunctionDecl(FD);*/
   }
 
   // Treat protoless main() as nullary.

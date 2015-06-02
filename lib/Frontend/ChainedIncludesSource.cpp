@@ -195,8 +195,9 @@ IntrusiveRefCntPtr<ExternalSemaSource> clang::createChainedIncludesSource(
     
     if (!Clang->InitializeSourceManager(InputFile))
       return nullptr;
-
-    ParseAST(Clang->getSema());
+	//TASKIFY change
+	//ParseAST(Clang->getSema());
+	ParseAST(Clang->getASTContext(), Clang->getSema());
     Clang->getDiagnosticClient().EndSourceFile();
     SerialBufs.push_back(llvm::MemoryBuffer::getMemBufferCopy(OS.str()));
     source->CIs.push_back(Clang.release());

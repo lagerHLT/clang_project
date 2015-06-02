@@ -30,6 +30,15 @@
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 #include <system_error>
+
+// TASKIFY
+#include "clang/Tooling/Tooling.h"
+#include <algorithm>
+#include <functional>
+#include <cctype>
+#include <locale>
+#include <fstream>
+
 using namespace clang;
 
 template class llvm::Registry<clang::PluginASTAction>;
@@ -430,11 +439,6 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 }
 
 //TASKIFY
-#include <fstream>
-#include <algorithm> 
-#include <functional> 
-#include <cctype>
-#include <locale>
 // it capitalizes the first letter of a string
 void Capitalize(std::string &s)
 {
@@ -491,17 +495,17 @@ void CreateOutputFile(std::string outName, std::string fileName, std::string par
 	outFile << "\n}\n";
 
 	// other part
-	outFile << "static void kernel(XTask *T){ \n";
-	outFile << " if ( FinestLevel(T) )\n";
-	outFile << "   base(T);\n";
+	outFile << "static void kernel(XTask *t){ \n";
+	outFile << " if ( FinestLevel(t) )\n";
+	outFile << "   base(t);\n";
 	outFile << "  else\n";
-	outFile << "   algorithm(T);\n";
+	outFile << "   algorithm(t);\n";
 	outFile << "};\n";
 
 	// remove the last )
 	replace(parameters.begin(), parameters.end(), ')', ' ');
 
-	outFile << "static void algorithm(" + parameters + ", XTask *T)\n{";
+	outFile << "static void algorithm(" + parameters + ", XTask *t)\n{";
 	outFile << /*functionBody*/"ALGORITHM_BODY;";
 	outFile << "\n";
 
@@ -509,14 +513,14 @@ void CreateOutputFile(std::string outName, std::string fileName, std::string par
 	parameters += ")";
 
 	// other part
-	outFile << "\talgorithm_end(T);\n";
+	outFile << "\talgorithm_end(t);\n";
 	outFile << "}\n";
-	outFile << "static void algorithm(XTask *T){\n";
+	outFile << "static void algorithm(XTask *t){\n";
 	outFile << "  unpack2(A,B);\n";
-	outFile << "  algorithm(A,B,T);\n";
+	outFile << "  algorithm(A,B,t);\n";
 	outFile << "}\n";
 
-	outFile << "static void base(XTask *T){\n";
+	outFile << "static void base(XTask *t){\n";
 	outFile << "  unpack2(A,B);\n";
 	outFile << "  base(A,B);\n";
 	outFile << "}\n";
@@ -576,7 +580,8 @@ std::string retrieveFunctionBody(std::string result, std::string functionName)
 	int char_position = 0;
 	while (char_position >= 0)
 	{
-		if (char_position = result.find(functionName))//if functionname is found
+		char_position = result.find(functionName);
+		if (char_position != -1)//if functionname is found
 		{
 			//is the found functionname not the start of the identifier. break
 			if (!isCompleteFunctionName(result, char_position, functionName.length()))
@@ -622,6 +627,62 @@ std::string retrieveFunctionBody(std::string result, std::string functionName)
 	return functionBody;
 }
 
+void removeEntireFunction(std::string &fileCode, std::string functionName)
+{
+	int char_position = 0;
+	char_position = fileCode.find(" " + functionName + "(");
+
+	while (char_position != -1)
+	{
+		//char_position = fileCode.find(functionName);
+		int funcName_start = char_position;
+		//is the found functionname not the start of the identifier. break
+		if (!isCompleteFunctionName(fileCode, char_position, functionName.length()))
+		{
+			//entire_function = fileCode.substr(char_position + 1); //move 1 step to ignore this name in the future
+			char_position++;
+			continue;
+		}
+
+		if (char_position = fileCode.find(")", funcName_start))//find next ")"
+		{
+			//find first {
+			while (!(fileCode[char_position] == '{') ){
+				char_position++;
+			}
+
+			if (fileCode[char_position] == '{')//it's a function
+			{
+				//save everything until statement is closed
+				std::string tokName;
+				char_position++;
+				int bracketsCounter = 0;
+				while (!(fileCode[char_position] == '}' && bracketsCounter == 0))
+				{
+					tokName = fileCode[char_position];
+					if (tokName == "{")
+						bracketsCounter++;
+					else if (tokName == "}")
+						bracketsCounter--;
+					char_position++;
+				}
+
+				//find the start of the return type
+				int returnTypeStart = funcName_start;
+				char before, after;
+				while (returnTypeStart > 0 && (fileCode[returnTypeStart] != '\n' && fileCode[returnTypeStart] != '}' && fileCode[returnTypeStart] != ';'))
+				{
+					returnTypeStart--;
+					after = fileCode[returnTypeStart];
+				}
+
+				fileCode.replace(returnTypeStart, char_position - returnTypeStart + 1, "");
+				break;
+			}
+		}
+	}
+}
+
 void FillFunctionBody(std::string fileName, std::string functionName, std::string Result, std::string replaceName){
 	//std::fstream outFile;
 	/*for (int i = 0; i < taskifiedFunctions->size(); i++){
@@ -647,12 +708,18 @@ void FillFunctionBody(std::string fileName, std::string functionName, std::strin
 	//}
 }
 
-std::string PrepareMainFunction(std::string mainFunction, std::vector<ASTContext::TaskifyStruct> &taskifiedFunctions){
+bool PrepareMainFunction(std::string &sourceCode, std::vector<ASTContext::TaskifyStruct> &taskifiedFunctions)
+{
+	// find position of main
+	int start_main = sourceCode.find(" main(");
+	if (start_main == -1)
+		return false;
+
 	//insert fw_start and fw_end
-	int posOfFirstBracket = mainFunction.find_first_of('{');
-	mainFunction = mainFunction.insert(posOfFirstBracket + 1, "fw_start();");
-	int posOfLastBracket = mainFunction.find_last_of('}');
-	mainFunction = mainFunction.insert(posOfLastBracket, "fw_end()");
+	int posOfFirstBracket = sourceCode.find_first_of('{', start_main);
+	sourceCode = sourceCode.insert(posOfFirstBracket + 1, "\nfw_start();");
+	int posOfLastBracket = sourceCode.find_last_of('}');
+	sourceCode = sourceCode.insert(posOfLastBracket, "fw_finish();\n");
 
 	//change function call names
 	for (int i = 0; i < taskifiedFunctions.size(); i++){
@@ -664,20 +731,21 @@ std::string PrepareMainFunction(std::string mainFunction, std::vector<ASTContext
 			continue;
 
 		int current_pos = 0;
-		while (current_pos = mainFunction.substr(current_pos).find(oldFuncName))//if functionname is found
+		while (current_pos = sourceCode.substr(current_pos).find(oldFuncName))//if functionname is found
 		{
 			//is the found functionname is not a function call. break
-			if (!isCompleteFunctionName(mainFunction, current_pos, oldFuncName.length())){
+			if (!isCompleteFunctionName(sourceCode, current_pos, oldFuncName.length())){
 				//move 1 step to ignore this name in the future
 				current_pos++; 
 			}
 			else{ 
 				//it's a function call. rename it
-				replace(mainFunction.substr(current_pos, oldFuncName.length()), oldFuncName, newFuncName);
+				sourceCode.replace(current_pos, oldFuncName.length(), newFuncName);
 			}
 		}
 	}
-	return mainFunction;
+
+	return true;
 }
 
 static const clang::FileEntry * getFileEntryForDecl(const clang::Decl * decl, clang::SourceManager * sourceManager)
@@ -699,7 +767,8 @@ static const char * getFileNameForDecl(const clang::Decl * decl, clang::SourceMa
 	return fileEntry->getName();
 }
 
-bool FrontendAction::Execute() {
+bool FrontendAction::Execute() 
+{
 	CompilerInstance &CI = getCompilerInstance();
 
 	if (CI.hasFrontendTimer()) {
@@ -709,25 +778,126 @@ bool FrontendAction::Execute() {
 	else ExecuteAction();
 
 	//TASKIFY
+	bool hasMainFunctionBeenTreated = false;
 	std::string Result;
 	llvm::raw_string_ostream Out(Result);
 	CI.getASTContext().getTranslationUnitDecl()->print(Out);
-	
-	//CI.getASTContext().getTranslationUnitDecl()->print(Out); // this line will give us main. WHY!!!!????
+
 	//all input files
 	std::vector<FrontendInputFile, std::allocator<FrontendInputFile>> files = CI.getFrontendOpts().Inputs;
+	for (int i = 0; i < files.size(); i++)
+	{
+		StringRef name = files[i].getFile();
+		std::string xlat_name = name.str();
+		bool new_name = replace(xlat_name, ".cpp", "_xlat.cpp");
+		assert(new_name == true);
+
+		// create the _xlat.cpp
+		std::ofstream outFile;
+		outFile.open(xlat_name, std::ios_base::app);
+
+		// close file
+		outFile.close();
+
+		//save the xlat file name
+		CI.getASTContext().getXlatFiles()[name.str()] = xlat_name;
+	}
 
 	//View file content
+	std::map<std::string, std::string> xlat_files_copy = CI.getASTContext().getXlatFiles();
+
 	DeclContext::decl_iterator iter_start = CI.getASTContext().getTranslationUnitDecl()->decls_begin();
-	for (; iter_start != CI.getASTContext().getTranslationUnitDecl()->decls_end(); iter_start++){
+	for (; iter_start != CI.getASTContext().getTranslationUnitDecl()->decls_end(); iter_start++)
+	{
+		//get the filename of the current decl
 		clang::SourceLocation sLoc = iter_start->getLocation();
 		clang::FileID fileID = CI.getASTContext().getSourceManager().getFileID(sLoc);
-		StringRef name = CI.getASTContext().getSourceManager().getFilename(sLoc);
-		StringRef data = CI.getASTContext().getSourceManager().getBufferData(fileID);
 
-		const FileEntry *fe = CI.getASTContext().getSourceManager().getFileManager().getFile(name);
-		bool valid = 0;
+		if (fileID.getFileID() == 0)
+			continue;
+
+		StringRef fileName = CI.getASTContext().getSourceManager().getFilename(sLoc);
+		std::string sourceCode = CI.getASTContext().getSourceManager().getBufferData(fileID).str();
+
+		//check if file is one of the xlat files
+		std::map<std::string, std::string>::iterator it = xlat_files_copy.find(fileName.str());
+	
+		// check if it exists
+		if (it == xlat_files_copy.end())
+			continue;
+
+		//remove all pragmas from current file
+		std::vector<ASTContext::TaskifyStruct> *taskifyFunctions = CI.getASTContext().getTaskifiedFunctions();
+		for (int i = 0; i < taskifyFunctions->size(); i++)
+		{
+			ASTContext::TaskifyStruct curr_func = (*taskifyFunctions)[i];
+			if (curr_func.fileName != fileName.str())
+				continue;
+
+			std::string finestName = curr_func.finestFunctionName;
+			std::string taskifyFunctionName = curr_func.taskifiedFunctionName;
+
+			removeEntireFunction(sourceCode, finestName);
+			removeEntireFunction(sourceCode, taskifyFunctionName);
+
+			// remove the pragma line
+			int startpos = sourceCode.find("#pragma taskify");
+			if (startpos != -1)
+			{
+				int pragmaLength = sourceCode.find_first_of('\n', startpos) - startpos;
+				sourceCode.replace(startpos, pragmaLength + 1, "");
+			}
+
+			// insert includes of each taskified file if we are in the main file
+			if (sourceCode.find(" main(") != -1){
+				std::string includeName = "#include \"" + curr_func.outFunctionName + ".hpp\"\n";
+				sourceCode.insert(0, includeName);
+			}
+		}	
+
+		//change the main
+		if (hasMainFunctionBeenTreated == false){
+			hasMainFunctionBeenTreated = PrepareMainFunction(sourceCode, *taskifyFunctions);
+		}
+
+		std::string xlat_name = it->second;	// get xlat filename
+		std::ofstream outFile;
+		outFile.open(xlat_name, std::ios_base::app);
 		
+		// add includes here
+		std::map<std::string, std::vector<std::string>> includesPerFile = CI.getASTContext().getIncludedFiles();
+		std::map<std::string, std::vector<std::string>>::iterator includesFile = includesPerFile.find(fileName.str());
+		// check if it exists
+		if (includesFile != includesPerFile.end())
+		{
+			for (int i = 0; i < includesFile->second.size(); i++){
+				std::string name = includesFile->second[i];
+				replace(name, "./", "");
+				if (name.find("framework.hpp") != -1)
+					continue;
+
+				std::string includeName = "#include \"" + name + "\"\n";
+				sourceCode.insert(0, includeName);
+			}
+		}
+
+		// put this include as first line
+		std::string frameworkName = "#include \"framework.hpp\"";
+		int fram = sourceCode.find(frameworkName);
+		if (fram != -1)
+		{
+			sourceCode.replace(fram, frameworkName.length(), "");
+			sourceCode.insert(0, frameworkName);
+		}
+
+		// rest of the codde
+		outFile << sourceCode;
+
+		// close file
+		outFile.close();
+
+		//remove file from list
+		xlat_files_copy.erase(it);
 	}
 
   std::vector<ASTContext::TaskifyStruct> *taskifiedFunctions = this->Instance->getASTContext().getTaskifiedFunctions();
@@ -735,7 +905,6 @@ bool FrontendAction::Execute() {
   //TASK ALSO
   FrontendOptions opt = CI.getFrontendOpts();
   //CI.getPreprocessor().getPreprocessingRecord()->getSourceManager().getIncludeLoc();
-
 
   //Create output files
   std::vector<std::string> includes; 
@@ -753,6 +922,7 @@ bool FrontendAction::Execute() {
   }
 
   //retrieve and modify main function
+  /*
   std::string mainFunc;
   if (taskifiedFunctions->size() > 0){
 	  // edit the main body
@@ -767,8 +937,8 @@ bool FrontendAction::Execute() {
 
 	  //create one translated file for each source file
 	  CreateTranslatedFile(fileName, includes, mainFunc);
-  }
-
+  }*/
+  
   // If we are supposed to rebuild the global module index, do so now unless
   // there were any module-build failures.
   if (CI.shouldBuildGlobalModuleIndex() && CI.hasFileManager() &&
@@ -865,7 +1035,9 @@ void ASTFrontendAction::ExecuteAction() {
   if (!CI.hasSema())
     CI.createSema(getTranslationUnitKind(), CompletionConsumer);
 
-  ParseAST(CI.getSema(), CI.getFrontendOpts().ShowStats,
+  //TASKIFY CHANGE
+  //ParseAST(CI.getSema(), CI.getFrontendOpts().ShowStats, CI.getFrontendOpts().SkipFunctionBodies);
+  ParseAST(CI.getASTContext(), CI.getSema(), CI.getFrontendOpts().ShowStats,
            CI.getFrontendOpts().SkipFunctionBodies);
 }
 

@@ -290,25 +290,26 @@ public:
   // TASKIFY
   struct TaskifyStruct
   {
-	std::string taskifiedFunctionName;
-	std::string finestFunctionName;
-	std::string outFunctionName;
-	std::string taskified_function_params;
-	std::string fileName;
-	std::vector<std::string> includes;
-	//int nr_of_params;
+    std::string taskifiedFunctionName;
+    std::string finestFunctionName;
+    std::string outFunctionName;
+    std::string taskified_function_params;
+    std::string fileName;
   };
-
+  
+  std::map<std::string, std::vector<std::string>> includeFiles;
+  std::map<std::string, std::string> xlat_files;
+  std::map<std::string, std::vector<std::string>>& getIncludedFiles() { return includeFiles; }
+  std::map<std::string, std::string>& getXlatFiles() { return xlat_files; }
+  
   std::string mainFunctionBody;
   std::vector<TaskifyStruct> v_taskifiedFunctions;
-  std::vector<TaskifyStruct> *getTaskifiedFunctions() { 
-	  return &v_taskifiedFunctions; 
-  }
-
-  void setMainFunctionBody(std::string b) { mainFunctionBody = b;  }
-  std::string getMainFunctionBody() { return mainFunctionBody;  }
-
-
+  std::vector<TaskifyStruct> *getTaskifiedFunctions() { return &v_taskifiedFunctions; }
+  
+  std::string mainFileName;
+  void setMainFunctionBody(std::string b) { mainFunctionBody = b; }
+  std::string getMainFunctionBody() { return mainFunctionBody; }
+  
   /// \brief A type synonym for the TemplateOrInstantiation mapping.
   typedef llvm::PointerUnion<VarTemplateDecl *, MemberSpecializationInfo *>
   TemplateOrSpecializationInfo;

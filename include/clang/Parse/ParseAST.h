@@ -41,8 +41,11 @@ namespace clang {
 
   /// \brief Parse the main file known to the preprocessor, producing an 
   /// abstract syntax tree.
-  void ParseAST(Sema &S, bool PrintStats = false,
-                bool SkipFunctionBodies = false);
+
+  //TASKIFY change
+  //void ParseAST(Sema &S, bool PrintStats = false,
+               // bool SkipFunctionBodies = false);
+  void ParseAST(ASTContext &Ctx, Sema &S, bool PrintStats = false, bool SkipFunctionBodies = false);
   
 }  // end namespace clang
 

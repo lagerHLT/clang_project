@@ -54,7 +54,7 @@ public:
 
   static FileID getSentinel() { return get(-1); }
   unsigned getHashValue() const { return static_cast<unsigned>(ID); }
-
+  int getFileID(){ return ID; }
 private:
   friend class SourceManager;
   friend class ASTWriter;

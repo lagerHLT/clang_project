@@ -74,6 +74,53 @@ void PrettyStackTraceParserEntry::print(raw_ostream &OS) const {
 }  // namespace
 
 //===----------------------------------------------------------------------===//
+// TASKIFY Actions
+//===----------------------------------------------------------------------===//
+
+class TaskifyPPCallbacks : public clang::PPCallbacks
+{
+  clang::SourceManager &_sm;
+  ASTContext &_context;
+  
+public:
+  TaskifyPPCallbacks (clang::SourceManager &sm, ASTContext &Context) : _sm (sm), _context (Context) { }
+  
+  // InclusionDirective
+  virtual void InclusionDirective (clang::SourceLocation HashLoc,
+                                   const clang::Token &,
+                                   clang::StringRef,
+                                   bool,
+                                   clang::CharSourceRange,
+                                   const clang::FileEntry *File,
+                                   clang::StringRef,
+                                   clang::StringRef,
+                                   const clang::Module *) {
+    // Convert to relative path
+    const char *fileWhereIncludeIs = _sm.getBufferName(HashLoc);
+    //const char *path = realpath (_sm.getBufferName (HashLoc), NULL);
+    if (fileWhereIncludeIs == NULL) {
+      llvm::errs() << "null path " << _sm.getBufferName (HashLoc)
+      << ": " << strerror (errno)
+      << "\n";
+    }
+    if (File != NULL) {
+      const char *include = File->getName();
+      //const char *fpath = realpath (File->getName (), NULL);
+      if (include == NULL) {
+        llvm::errs() << "null fpath " << File->getName ()
+        << ": " << strerror (errno)
+        << "\n";
+      }
+      
+      if ((include != NULL) && (fileWhereIncludeIs != NULL)) {
+        // Store the relationship
+		  _context.getIncludedFiles()[fileWhereIncludeIs].push_back(include);
+      }
+    }
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // Public interface to the file
 //===----------------------------------------------------------------------===//
 
@@ -93,10 +140,14 @@ void clang::ParseAST(Preprocessor &PP, ASTConsumer *Consumer,
   // Recover resources if we crash before exiting this method.
   llvm::CrashRecoveryContextCleanupRegistrar<Sema> CleanupSema(S.get());
   
-  ParseAST(*S.get(), PrintStats, SkipFunctionBodies);
+  //TASKIFY CHANGE
+  //ParseAST(*S.get(), PrintStats, SkipFunctionBodies);
+  ParseAST(Ctx, *S.get(), PrintStats, SkipFunctionBodies);
 }
 
-void clang::ParseAST(Sema &S, bool PrintStats, bool SkipFunctionBodies) {
+//TASKIFY CHANGE
+//void clang::ParseAST(Sema &S, bool PrintStats, bool SkipFunctionBodies) {
+void clang::ParseAST(ASTContext &Ctx, Sema &S, bool PrintStats, bool SkipFunctionBodies) {
   // Collect global stats on Decls/Stmts (until we have a module streamer).
   if (PrintStats) {
     Decl::EnableStatistics();
@@ -119,8 +170,29 @@ void clang::ParseAST(Sema &S, bool PrintStats, bool SkipFunctionBodies) {
   llvm::CrashRecoveryContextCleanupRegistrar<Parser>
     CleanupParser(ParseOP.get());
 
+  // TASKIFY
+  TaskifyPPCallbacks *ppc = new TaskifyPPCallbacks (S.getSourceManager(), Ctx);   // add callbacks when we encounter an #include
+  S.getPreprocessor().addPPCallbacks (std::unique_ptr<PPCallbacks>(ppc));
+  clang::Token token;
+  
+  // from Clang
   S.getPreprocessor().EnterMainSourceFile();
   P.Initialize();
+  
+  // save position of the current lex position
+  S.getPreprocessor().EnableBacktrackAtThisPos();
+  
+  // read all tokes for finding #include
+  do {
+    S.getPreprocessor().Lex(token);
+  }
+  while (token.isNot (clang::tok::eof));
+  
+  // restore the lex position and continue
+  S.getPreprocessor().Backtrack();
+  
+  // retrieve all the includes
+  std::map<std::string, std::vector<std::string>> includesPerFile = Ctx.getIncludedFiles();
 
   // C11 6.9p1 says translation units must have at least one top-level
   // declaration. C++ doesn't have this restriction. We also don't want to
