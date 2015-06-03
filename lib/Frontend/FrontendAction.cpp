@@ -460,9 +460,10 @@ void Capitalize(std::string &s)
 
 bool isCompleteFunctionName(std::string funcBody, int charStart, int nameLength){
 	//is the found functionname not the start of the identifier
-	if (isalpha(funcBody[charStart - 1]) ||
+	if (charStart > 0 &&
+		(isalpha(funcBody[charStart - 1]) ||
 		isdigit(funcBody[charStart - 1]) ||
-		funcBody[charStart - 1] == '_')
+		funcBody[charStart - 1] == '_'))
 	{
 		return false;
 	}
@@ -477,11 +478,44 @@ bool isCompleteFunctionName(std::string funcBody, int charStart, int nameLength)
 	return true;
 }
 
+#include <sstream>
+std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
+	std::stringstream ss(s);
+	std::string item;
+	while (std::getline(ss, item, delim)) {
+		elems.push_back(item);
+	}
+	return elems;
+}
+
+std::vector<std::string> split(const std::string &s, char delim) {
+	std::vector<std::string> elems;
+	split(s, delim, elems);
+	return elems;
+}
+
+bool replace(std::string& str, const std::string& from, const std::string& to)
+{
+	size_t start_pos = str.find(from);
+	if (start_pos == std::string::npos)
+		return false;
+	str.replace(start_pos, from.length(), to);
+	return true;
+}
+
 void CreateOutputFile(std::string outName, std::string fileName, std::string parameters)
 {
 	std::string className = outName;
 	std::ofstream outFile;
-	outFile.open(fileName, std::ios_base::app);
+	outFile.open(fileName);//, std::ios_base::app);
+	
+
+	//(xdata&A, xdata&b, xdata&ab) == (A,b,ab)
+	std::string clean_parameters = parameters;
+	while (replace(clean_parameters, "XData", "") == true);
+	while (replace(clean_parameters, "&", "") == true);
+	replace(clean_parameters, ")", "");
+	int param_count = split(clean_parameters, ',').size();
 
 	//beginning of file
 	Capitalize(className);
@@ -516,19 +550,37 @@ void CreateOutputFile(std::string outName, std::string fileName, std::string par
 	outFile << "\talgorithm_end(t);\n";
 	outFile << "}\n";
 	outFile << "static void algorithm(XTask *t){\n";
-	outFile << "  unpack2(A,B);\n";
-	outFile << "  algorithm(A,B,t);\n";
-	outFile << "}\n";
+	if (param_count == 1){
+		outFile << "  unpack(" + clean_parameters + ");\n";
+	}
+	else{
+		outFile << "  unpack";
+		outFile << std::to_string(param_count);
+		outFile << "(" + clean_parameters + ");\n";
+	}
 
+	outFile << "  algorithm(" + clean_parameters + ", t); \n";
+	outFile << "}\n";
 	outFile << "static void base(XTask *t){\n";
-	outFile << "  unpack2(A,B);\n";
-	outFile << "  base(A,B);\n";
+
+	if (param_count == 1){
+		outFile << "  unpack(" + clean_parameters + ");\n";
+	}
+	else{
+		outFile << "  unpack";
+		outFile << std::to_string(param_count);
+		outFile << "(" + clean_parameters + ");\n";
+	}
+
+	outFile << "  base(" + clean_parameters + "); \n";
 	outFile << "}\n";
 	outFile << "void operator()(" + parameters + "{\n";
-	outFile << "  run(A,B);\n";
+
+	outFile << "  run(" + clean_parameters + "); \n";
 	outFile << "}\n";
 	outFile << "static void run(" + parameters + "{\n";
-	outFile << "  submit_task(A,B);\n";
+
+	outFile << "  submit_task(" + clean_parameters + "); \n";
 	outFile << "}\n";
 	outFile << "};\n";
 
@@ -557,15 +609,6 @@ void CreateTranslatedFile(std::string fileName, std::vector<std::string> include
 
 	// close file
 	outFile.close();
-}
-
-bool replace(std::string& str, const std::string& from, const std::string& to) 
-{
-	size_t start_pos = str.find(from);
-	if (start_pos == std::string::npos)
-		return false;
-	str.replace(start_pos, from.length(), to);
-	return true;
 }
 
 // trim from start
@@ -741,6 +784,7 @@ bool PrepareMainFunction(std::string &sourceCode, std::vector<ASTContext::Taskif
 			else{ 
 				//it's a function call. rename it
 				sourceCode.replace(current_pos, oldFuncName.length(), newFuncName);
+				break;
 			}
 		}
 	}
@@ -779,9 +823,9 @@ bool FrontendAction::Execute()
 
 	//TASKIFY
 	bool hasMainFunctionBeenTreated = false;
-	std::string Result;
+	/*std::string Result;
 	llvm::raw_string_ostream Out(Result);
-	CI.getASTContext().getTranslationUnitDecl()->print(Out);
+	CI.getASTContext().getTranslationUnitDecl()->print(Out);*/
 
 	//all input files
 	std::vector<FrontendInputFile, std::allocator<FrontendInputFile>> files = CI.getFrontendOpts().Inputs;
@@ -794,7 +838,7 @@ bool FrontendAction::Execute()
 
 		// create the _xlat.cpp
 		std::ofstream outFile;
-		outFile.open(xlat_name, std::ios_base::app);
+		outFile.open(xlat_name);
 
 		// close file
 		outFile.close();
@@ -849,7 +893,7 @@ bool FrontendAction::Execute()
 			}
 
 			// insert includes of each taskified file if we are in the main file
-			if (sourceCode.find(" main(") != -1){
+			if (sourceCode.find(" main(") != -1 || sourceCode.find(" main ") != -1){
 				std::string includeName = "#include \"" + curr_func.outFunctionName + ".hpp\"\n";
 				sourceCode.insert(0, includeName);
 			}
@@ -862,7 +906,7 @@ bool FrontendAction::Execute()
 
 		std::string xlat_name = it->second;	// get xlat filename
 		std::ofstream outFile;
-		outFile.open(xlat_name, std::ios_base::app);
+		outFile.open(xlat_name, std::ios::app);
 		
 		// add includes here
 		std::map<std::string, std::vector<std::string>> includesPerFile = CI.getASTContext().getIncludedFiles();
@@ -887,7 +931,7 @@ bool FrontendAction::Execute()
 		if (fram != -1)
 		{
 			sourceCode.replace(fram, frameworkName.length(), "");
-			sourceCode.insert(0, frameworkName);
+			sourceCode.insert(0, frameworkName + "\n");
 		}
 
 		// rest of the codde
@@ -913,9 +957,18 @@ bool FrontendAction::Execute()
   {
 	  ASTContext::TaskifyStruct curr_func = (*taskifiedFunctions)[i];
 	  std::string fileName = curr_func.outFunctionName + ".hpp";
+
+	  //get code from file
+	  std::ifstream fileIn(curr_func.fileName);
+	  std::string code;
+	  std::string line;
+	  while (std::getline(fileIn, line))
+		  code += line + "\n";
+	  fileIn.close();
+
 	  CreateOutputFile(curr_func.outFunctionName, fileName, curr_func.taskified_function_params);
-	  FillFunctionBody(fileName, curr_func.finestFunctionName, Result, "FINEST_LEVEL_BODY;");
-	  FillFunctionBody(fileName, curr_func.outFunctionName, Result, "ALGORITHM_BODY;");
+	  FillFunctionBody(fileName, curr_func.finestFunctionName, code, "FINEST_LEVEL_BODY;");
+	  FillFunctionBody(fileName, curr_func.outFunctionName, code, "ALGORITHM_BODY;");
 
 	  //add all outnames as includes
 	  includes.push_back(curr_func.outFunctionName);
